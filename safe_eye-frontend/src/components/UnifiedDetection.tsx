@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Upload, Loader2, Camera } from "lucide-react";
+import { Upload, Loader2} from "lucide-react";
 
 interface Detection {
   label: string;
