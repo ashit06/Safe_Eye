@@ -25,7 +25,7 @@ export default function UnifiedDetection() {
   const wsRef = useRef<WebSocket | null>(null);
   const captureIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "ws://127.0.0.1:8000/ws/detect/";
+  const API_BASE = process.env.NEXT_PUBLIC_API_URL || "ws://127.0.0.1:8000/ws/detect/";
 
   const startWebSocket = () => {
     setWsError(null);
@@ -140,7 +140,7 @@ export default function UnifiedDetection() {
     formData.append("image", selectedFile);
 
     try {
-      const res = await fetch("http://127.0.0.1:8000/api/ai/incident/", {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/ai/incident/`, {
         method: "POST",
         body: formData,
       });

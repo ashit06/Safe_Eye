@@ -61,7 +61,8 @@ export default function EventRecords() {
     (async () => {
       try {
         const response = await axios.get<Incident[]>(
-          "http://127.0.0.1:8000/api/incidents/",
+          `${process.env.NEXT_PUBLIC_API_URL}/api/incidents/`,
+
           {
             headers: { Authorization: `Bearer ${token}` },
           }
