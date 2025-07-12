@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from "react";
-import axios from "axios";
+import axios, { AxiosError } from "axios";
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
@@ -29,7 +29,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Search, Download, Eye,  Loader2 } from "lucide-react";
+import { Search, Download, Eye, Loader2 } from "lucide-react";
 
 import { getAuthToken, clearAuthData } from "@/lib/auth";
 
@@ -47,58 +47,57 @@ export default function EventRecords() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterType, setFilterType] = useState("all");
+
   const router = useRouter();
   const token = getAuthToken();
 
-  // Fetch incidents on mount
   useEffect(() => {
     if (!token) {
       clearAuthData();
       router.push("/login");
       return;
     }
+
     (async () => {
       try {
-        const res = await axios.get<Incident[]>(
+        const response = await axios.get<Incident[]>(
           "http://127.0.0.1:8000/api/incidents/",
-          { headers: { Authorization: `Bearer ${token}` } }
+          {
+            headers: { Authorization: `Bearer ${token}` },
+          }
         );
-        setIncidents(res.data);
-      } catch (err: any) {
+        setIncidents(response.data);
+      } catch (err: unknown) {
         console.error("Error fetching incidents:", err);
-        if (err.response?.status === 401) {
-          clearAuthData();
-          router.push("/login");
+        if (axios.isAxiosError(err)) {
+          const axiosError = err as AxiosError;
+          if (axiosError.response?.status === 401) {
+            clearAuthData();
+            router.push("/login");
+          }
         }
       } finally {
         setLoading(false);
       }
     })();
-  }, [router, token]);
+  }, [token, router]);
 
-  // Filter & search
-  const filtered = incidents.filter((inc) => {
-    const matchesSearch =
-      inc.id.toString().includes(searchTerm) ||
-      inc.incident_type.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      inc.location.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesFilter =
+  const filteredIncidents = incidents.filter((incident) => {
+    const searchMatch =
+      incident.id.toString().includes(searchTerm) ||
+      incident.incident_type.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      incident.location.toLowerCase().includes(searchTerm.toLowerCase());
+
+    const filterMatch =
       filterType === "all" ||
-      inc.incident_type.toLowerCase() === filterType.toLowerCase();
-    return matchesSearch && matchesFilter;
+      incident.incident_type.toLowerCase() === filterType.toLowerCase();
+
+    return searchMatch && filterMatch;
   });
 
-  const badgeColor = (type: string) =>
-    type === "accident" ? "destructive" : "default";
-
-  if (loading) {
-    return (
-      <div className="p-6 text-center">
-        <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2" />
-        <p>Loading events…</p>
-      </div>
-    );
-  }
+  const getBadgeVariant = (type: string): "default" | "destructive" => {
+    return type === "accident" ? "destructive" : "default";
+  };
 
   return (
     <div className="space-y-6">
@@ -121,6 +120,7 @@ export default function EventRecords() {
                 className="pl-10"
               />
             </div>
+
             <Select value={filterType} onValueChange={setFilterType}>
               <SelectTrigger className="w-full sm:w-48">
                 <SelectValue placeholder="Filter by type" />
@@ -132,6 +132,7 @@ export default function EventRecords() {
                 <SelectItem value="murder">Murder</SelectItem>
               </SelectContent>
             </Select>
+
             <Button variant="outline">
               <Download className="h-4 w-4 mr-2" />
               Export CSV
@@ -139,47 +140,55 @@ export default function EventRecords() {
           </div>
 
           {/* Events Table */}
-          <div className="rounded-md border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>ID</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Location</TableHead>
-                  <TableHead>Timestamp</TableHead>
-                  <TableHead>Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filtered.map((inc) => (
-                  <TableRow key={inc.id}>
-                    <TableCell className="font-medium">{inc.id}</TableCell>
-                    <TableCell>
-                      <Badge variant={badgeColor(inc.incident_type) as any}>
-                        {inc.incident_type}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>{inc.location}</TableCell>
-                    <TableCell>
-                      {new Date(inc.timestamp).toLocaleString()}
-                    </TableCell>
-                    <TableCell>
-                      <Button variant="ghost" size="sm">
-                        <Eye className="h-4 w-4" />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-                {filtered.length === 0 && (
+          {loading ? (
+            <div className="text-center py-12">
+              <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2" />
+              <p>Loading incidents...</p>
+            </div>
+          ) : (
+            <div className="rounded-md border">
+              <Table>
+                <TableHeader>
                   <TableRow>
-                    <TableCell colSpan={5} className="text-center py-4">
-                      No events match your criteria.
-                    </TableCell>
+                    <TableHead>ID</TableHead>
+                    <TableHead>Type</TableHead>
+                    <TableHead>Location</TableHead>
+                    <TableHead>Timestamp</TableHead>
+                    <TableHead>Actions</TableHead>
                   </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </div>
+                </TableHeader>
+                <TableBody>
+                  {filteredIncidents.length > 0 ? (
+                    filteredIncidents.map((incident) => (
+                      <TableRow key={incident.id}>
+                        <TableCell className="font-medium">{incident.id}</TableCell>
+                        <TableCell>
+                          <Badge variant={getBadgeVariant(incident.incident_type)}>
+                            {incident.incident_type}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>{incident.location}</TableCell>
+                        <TableCell>
+                          {new Date(incident.timestamp).toLocaleString()}
+                        </TableCell>
+                        <TableCell>
+                          <Button variant="ghost" size="sm">
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  ) : (
+                    <TableRow>
+                      <TableCell colSpan={5} className="text-center py-4">
+                        No events match your criteria.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

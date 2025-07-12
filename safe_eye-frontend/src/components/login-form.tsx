@@ -1,52 +1,79 @@
-"use client"
+'use client';
 
-import { useState } from "react"
-import axios from "axios"
-import { useRouter } from "next/navigation"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Shield, Eye, EyeOff } from "lucide-react"
-import { storeAuthTokens } from "@/lib/auth"
+import { useState, FormEvent, ChangeEvent } from "react";
+import axios, { AxiosError } from "axios";
+import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Shield, Eye, EyeOff } from "lucide-react";
+import { storeAuthTokens } from "@/lib/auth";
+
+interface LoginResponse {
+  access: string;
+  refresh: string;
+}
 
 export default function LoginForm() {
-  const [showPassword, setShowPassword] = useState(false)
-  const [credentials, setCredentials] = useState({ username: "", password: "" })
-  const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState("")
-  const router = useRouter()
+  const [showPassword, setShowPassword] = useState(false);
+  const [credentials, setCredentials] = useState({
+    username: "",
+    password: "",
+  });
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState("");
 
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setIsLoading(true)
-    setError("")
+  const router = useRouter();
+
+  const handleLogin = async (e: FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+    setError("");
 
     try {
-      const response = await axios.post("http://127.0.0.1:8000/api/token/", {
-        username: credentials.username,
-        password: credentials.password,
-      })
+      const response = await axios.post<LoginResponse>(
+        "http://127.0.0.1:8000/api/token/",
+        {
+          username: credentials.username,
+          password: credentials.password,
+        }
+      );
 
-      const { access, refresh } = response.data
-      storeAuthTokens(access, refresh)
+      storeAuthTokens(response.data.access, response.data.refresh);
+      router.push("/dashboard");
+    } catch (err) {
+      console.error("Login error:", err);
+      if (axios.isAxiosError(err)) {
+        const axiosError = err as AxiosError;
 
-      router.push("/dashboard")
-    } catch (err: any) {
-      console.error("Login error:", err)
-      if (err.response?.status === 401) {
-        setError("Invalid username or password. Please try again.")
-      } else if (err.response?.status === 400) {
-        setError("Please provide both username and password.")
-      } else if (err.code === "ERR_NETWORK") {
-        setError("Unable to connect to server. Please check your connection.")
+        if (axiosError.response?.status === 401) {
+          setError("Invalid username or password. Please try again.");
+        } else if (axiosError.response?.status === 400) {
+          setError("Please provide both username and password.");
+        } else if (axiosError.code === "ERR_NETWORK") {
+          setError("Unable to connect to the server. Check your connection.");
+        } else {
+          setError("An unexpected error occurred. Please try again.");
+        }
       } else {
-        setError("An unexpected error occurred. Please try again.")
+        setError("An error occurred. Please try again.");
       }
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }
+  };
+
+  const handleChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const { id, value } = e.target;
+    setCredentials((prev) => ({ ...prev, [id]: value }));
+  };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-900 via-blue-800 to-indigo-900">
@@ -60,8 +87,14 @@ export default function LoginForm() {
         </CardHeader>
         <CardContent>
           <div className="mb-4 text-sm text-gray-600 text-center bg-yellow-100 p-2 rounded-md">
-            <p><strong>Demo Login:</strong> <span className="font-mono">admin / admin123</span></p>
-            <p className="mt-1 text-xs text-red-700">Note: This portal is strictly for administrative use only. <br /> There is <strong>no sign-up option</strong>.</p>
+            <p>
+              <strong>Demo Login:</strong>{" "}
+              <span className="font-mono">admin / admin123</span>
+            </p>
+            <p className="mt-1 text-xs text-red-700">
+              Note: This portal is strictly for administrative use only.
+              <br /> There is <strong>no sign-up option</strong>.
+            </p>
           </div>
 
           <form onSubmit={handleLogin} className="space-y-4">
@@ -72,7 +105,7 @@ export default function LoginForm() {
                 type="text"
                 placeholder="Enter your username"
                 value={credentials.username}
-                onChange={(e) => setCredentials((prev) => ({ ...prev, username: e.target.value }))}
+                onChange={handleChange}
                 required
               />
             </div>
@@ -84,7 +117,7 @@ export default function LoginForm() {
                   type={showPassword ? "text" : "password"}
                   placeholder="Enter your password"
                   value={credentials.password}
-                  onChange={(e) => setCredentials((prev) => ({ ...prev, password: e.target.value }))}
+                  onChange={handleChange}
                   required
                 />
                 <Button
@@ -94,7 +127,11 @@ export default function LoginForm() {
                   className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
                   onClick={() => setShowPassword(!showPassword)}
                 >
-                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  {showPassword ? (
+                    <EyeOff className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
                 </Button>
               </div>
             </div>
@@ -108,5 +145,5 @@ export default function LoginForm() {
         </CardContent>
       </Card>
     </div>
-  )
+  );
 }

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from "react";
-import axios from "axios";
+import axios, { AxiosError } from "axios";
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
@@ -41,26 +41,32 @@ export default function DashboardPage() {
       clearAuthData();
       router.push("/login");
     }
-  }, [router, token]);
+  }, [router, token]); // ✅ include router in dependency
 
   // Fetch stats
   useEffect(() => {
     if (!token) return;
+
     (async () => {
       try {
         const res = await axios.get("http://127.0.0.1:8000/api/incidents/", {
           headers: { Authorization: `Bearer ${token}` },
         });
+
         const incidents = res.data as Array<{ incident_type: string }>;
         setEventsToday(incidents.length);
         setActiveAlerts(incidents.filter(i => i.incident_type !== "normal").length);
         setCameras(12);
         setCoverageAreas(8);
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error("Error fetching data:", err);
-        if (err.response?.status === 401) {
-          clearAuthData();
-          router.push("/login");
+        if (axios.isAxiosError(err)) {
+          if (err.response?.status === 401) {
+            clearAuthData();
+            router.push("/login");
+          } else {
+            setSystemStatus("Error");
+          }
         } else {
           setSystemStatus("Error");
         }
