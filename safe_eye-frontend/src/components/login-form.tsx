@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, FormEvent, ChangeEvent } from "react";
-import axios, { AxiosError } from "axios";
+import axios from "axios";
+
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import {
