@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useEffect } from "react";
-import axios, { AxiosError } from "axios";
 import { useRouter } from "next/navigation";
+import axios from "axios"; // ✅ FIXED
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -35,15 +35,13 @@ export default function DashboardPage() {
   const router = useRouter();
   const token = getAuthToken();
 
-  // Redirect to login if not authenticated
   useEffect(() => {
     if (!token) {
       clearAuthData();
       router.push("/login");
     }
-  }, [router, token]); // ✅ include router in dependency
+  }, [router, token]); // ✅ includes router
 
-  // Fetch stats
   useEffect(() => {
     if (!token) return;
 
