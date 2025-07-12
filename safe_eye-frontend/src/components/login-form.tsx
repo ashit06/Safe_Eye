@@ -52,13 +52,11 @@ export default function LoginForm() {
     } catch (err) {
       console.error("Login error:", err);
       if (axios.isAxiosError(err)) {
-        const axiosError = err as AxiosError;
-
-        if (axiosError.response?.status === 401) {
+        if (err.response?.status === 401) {
           setError("Invalid username or password. Please try again.");
-        } else if (axiosError.response?.status === 400) {
+        } else if (err.response?.status === 400) {
           setError("Please provide both username and password.");
-        } else if (axiosError.code === "ERR_NETWORK") {
+        } else if (err.code === "ERR_NETWORK") {
           setError("Unable to connect to the server. Check your connection.");
         } else {
           setError("An unexpected error occurred. Please try again.");
