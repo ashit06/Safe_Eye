@@ -25,7 +25,10 @@ export default function UnifiedDetection() {
   const wsRef = useRef<WebSocket | null>(null);
   const captureIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  const API_BASE = process.env.NEXT_PUBLIC_API_URL || "ws://127.0.0.1:8000/ws/detect/";
+  const HTTP_BASE = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+
+  // Convert http://... to ws://... and append the WebSocket path
+  const API_BASE = HTTP_BASE.replace(/^http/, "ws") + "/ws/detect/";
 
   const startWebSocket = () => {
     setWsError(null);

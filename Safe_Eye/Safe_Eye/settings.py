@@ -56,11 +56,12 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
-CORS_ALLOW_ALL_ORIGINS = True  # for development only
+CORS_ALLOW_ALL_ORIGINS = False  # for development only
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
+    "https://safe-eye-steo.vercel.app",
 ]
 CORS_ALLOWED_METHODS = [
     "DELETE",
@@ -80,6 +81,10 @@ CORS_ALLOWED_HEADERS = [
     "user-agent",
     "x-csrftoken",
     "x-requested-with",
+]
+
+CSRF_TRUSTED_ORIGINS = [
+    "https://safe-eye-steo.vercel.app",  # ✅ add this
 ]
 
 ROOT_URLCONF = 'Safe_Eye.urls'
