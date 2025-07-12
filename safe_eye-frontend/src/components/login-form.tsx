@@ -29,8 +29,6 @@ export default function LoginForm() {
       })
 
       const { access, refresh } = response.data
-
-      // Store tokens using the utility function
       storeAuthTokens(access, refresh)
 
       router.push("/dashboard")
@@ -61,6 +59,11 @@ export default function LoginForm() {
           <CardDescription>Administrator Access Portal</CardDescription>
         </CardHeader>
         <CardContent>
+          <div className="mb-4 text-sm text-gray-600 text-center bg-yellow-100 p-2 rounded-md">
+            <p><strong>Demo Login:</strong> <span className="font-mono">admin / admin123</span></p>
+            <p className="mt-1 text-xs text-red-700">Note: This portal is strictly for administrative use only. <br /> There is <strong>no sign-up option</strong>.</p>
+          </div>
+
           <form onSubmit={handleLogin} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="username">Username</Label>
