@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: safe-eye-backend
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: daphne Safe_Eye.asgi:application
+    envVars:
+      - key: DJANGO_SETTINGS_MODULE
+        value: Safe_Eye.settings
+      - key: SECRET_KEY
+        value: your_secret_key
+    autoDeploy: true

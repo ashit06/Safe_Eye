@@ -174,4 +174,9 @@ REST_FRAMEWORK = {
     )
 }
 
+# Safe email backend for testing
+EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+DEFAULT_FROM_EMAIL = 'noreply@safeeye.local'
+
+
 

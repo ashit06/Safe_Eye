@@ -1,13 +1,26 @@
-Django==5.0.6
-djangorestframework==3.15.1
-django-cors-headers==4.3.1
-numpy==1.26.4
-opencv-python==4.9.0.80
-Pillow==10.3.0
-ultralytics==8.1.27  # if you're using YOLO models
+# Core Django and DRF
+Django>=5.1,<6.0
+djangorestframework>=3.15.1
+djangorestframework-simplejwt>=5.3.1
 
-channels
-daphne
-djangorestframework-simplejwt
+# Channels for WebSocket & ASGI
+channels>=4.0.0
+daphne>=4.1.0
 
- ### --upgrade ultralytics
+# CORS headers
+django-cors-headers>=4.3.1
+
+# Computer Vision / AI
+ultralytics>=8.1.33  # YOLOv8 - latest compatible
+opencv-python>=4.9.0.80
+numpy>=1.26.4
+Pillow>=10.3.0
+
+# HTTP requests for API calls
+requests>=2.31.0
+
+# Deployment server
+gunicorn>=21.2.0
+
+# Optional (for .env usage)
+python-dotenv>=1.0.0

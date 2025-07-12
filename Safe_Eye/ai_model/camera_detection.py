@@ -6,6 +6,8 @@ from ultralytics import YOLO
 from django.conf import settings
 import requests
 import json
+from channels.layers import get_channel_layer
+from asgiref.sync import async_to_sync
 
 class CameraDetectionService:
     def __init__(self):
@@ -75,12 +77,14 @@ class CameraDetectionService:
                 # Run detection at specified interval
                 if current_time - last_detection_time >= detection_interval:
                     detections = self._detect_accidents(frame)
-                    
+                    print(f"👀 Raw detections: {detections}")  # 🔍 This line helps verify output
+
                     if detections:
                         print(f"🚨 Accident detected! Found {len(detections)} incidents")
                         self._handle_accident_detection(detections, frame)
-                    
+
                     last_detection_time = current_time
+
                     
                 # Optional: Display live feed (comment out for production)
                 # cv2.imshow('Live Camera Detection', frame)
@@ -95,86 +99,132 @@ class CameraDetectionService:
             cv2.destroyAllWindows()
             
     def _detect_accidents(self, frame):
-        """
-        Run YOLO detection on a frame
-        
-        Args:
-            frame: OpenCV frame
-            
-        Returns:
-            List of detections with bounding boxes and confidence scores
-        """
         try:
-            results = self.model(frame)
+            results = self.model(frame)[0]  # Only first result
             detections = []
-            
-            for result in results:
-                for box in result.boxes:
-                    detection = {
-                        'class': int(box.cls),
-                        'label': result.names[int(box.cls)],
-                        'confidence': float(box.conf),
-                        'box': [float(coord) for coord in box.xyxy[0]],
-                        'timestamp': time.time()
-                    }
-                    detections.append(detection)
-                    
+
+            for box in results.boxes:
+                cls_id = int(box.cls.item())
+                label = self.model.names[cls_id]
+                conf = float(box.conf.item())
+                coords = box.xyxy[0].tolist()
+
+                detection = {
+                    'class': cls_id,
+                    'label': label,
+                    'confidence': conf,
+                    'box': coords,
+                    'timestamp': time.time()
+                }
+                detections.append(detection)
+
+            print(f"👀 Raw detections: {detections}")
             return detections
-            
+
         except Exception as e:
             print(f"❌ Error in accident detection: {e}")
             return []
-            
+
+
+    from datetime import datetime
+
     def _handle_accident_detection(self, detections, frame):
-        """
-        Handle detected accidents - save to database, notify frontend, etc.
-        
-        Args:
-            detections: List of detected objects
-            frame: The frame where detection occurred
-        """
+        print(f"🧠 _handle_accident_detection triggered with {len(detections)} detections")
+
+
         try:
-            # Save frame as image (optional)
-            timestamp = int(time.time())
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             frame_path = f"media/accident_frames/accident_{timestamp}.jpg"
             os.makedirs(os.path.dirname(frame_path), exist_ok=True)
             cv2.imwrite(frame_path, frame)
-            
-            # Create incident record in database
+
+            print(f"📸 Accident frame saved: {frame_path}")
+
+            # Save to DB via Django API
             incident_data = {
                 'incident_type': 'accident',
-                'detections': detections,
-                'frame_path': frame_path,
-                'timestamp': timestamp,
-                'camera_id': 'live_camera'
+                'description': 'Accident detected via AI',
+                'location': 'Live Camera',
+                'confidence': 0.92,
+                'image': open(frame_path, 'rb'),  # NOTE: Still not used because you are using `json=`
             }
-            
-            # Call Django API to save incident
+
+            print("📦 Sending data to _save_incident_to_database...")  # ← Add this line
+
             self._save_incident_to_database(incident_data)
-            
-            print(f"📸 Accident frame saved: {frame_path}")
-            
+
+            # WebSocket broadcast
+            print("📡 Broadcasting WebSocket alert...")
+            channel_layer = get_channel_layer()
+            async_to_sync(channel_layer.group_send)(
+                "alerts",
+                {
+                    "type": "accident.alert",
+                    "message": {
+                        "location": "Live Camera",
+                        "timestamp": timestamp,
+                        "confidence": 0.92,
+                        "image": f"/media/accident_frames/accident_{timestamp}.jpg",
+                    },
+                },
+            )
+
         except Exception as e:
             print(f"❌ Error handling accident detection: {e}")
-            
+
+
+
     def _save_incident_to_database(self, incident_data):
-        """
-        Save incident to Django database via API call
-        """
         try:
-            # This would call your Django API endpoint
-            # For now, we'll just print the data
-            print(f"💾 Saving incident to database: {incident_data}")
-            
-            # TODO: Implement actual API call to save incident
-            # response = requests.post(
-            #     'http://127.0.0.1:8000/api/incidents/',
-            #     json=incident_data,
-            #     headers={'Content-Type': 'application/json'}
-            # )
-            
+            print("🔐 Logging in as admin...")
+
+            # Step 1: Login to get token
+            auth_response = requests.post(
+                "http://127.0.0.1:8000/api/token/",
+                json={"username": "admin", "password": "admin123"},
+                headers={"Content-Type": "application/json"}
+            )
+
+            if auth_response.status_code != 200:
+                print("❌ Failed to authenticate admin")
+                print(auth_response.text)
+                return
+
+            access_token = auth_response.json().get("access")
+
+            # Step 2: Extract file and data
+            files = {
+                'image': incident_data['image']
+            }
+            data = {
+                'incident_type': incident_data['incident_type'],
+                'description': incident_data['description'],
+                'location': incident_data['location'],
+                'confidence': incident_data['confidence'],
+            }
+
+            print("📨 Sending POST to /api/incidents/ ...")
+
+            response = requests.post(
+                "http://127.0.0.1:8000/api/incidents/",
+                data=data,
+                files=files,
+                headers={
+                    "Authorization": f"Bearer {access_token}"
+                }
+            )
+
+            if response.status_code == 201:
+                print("✅ Incident saved to database")
+            else:
+                print(f"❌ Failed to save incident: {response.status_code}")
+                print(response.text)
+
         except Exception as e:
             print(f"❌ Error saving incident to database: {e}")
+
+
+
             
     def get_camera_status(self):
         """Get current camera detection status"""
