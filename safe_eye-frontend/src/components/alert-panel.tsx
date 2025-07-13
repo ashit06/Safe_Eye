@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import axios from "axios";
+import api from '@/lib/api';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -38,9 +38,8 @@ export default function AlertPanel() {
 
     setIsLoading(true);
     try {
-      const response = await axios.get(`${process.env.NEXT_PUBLIC_API_URL}/api/incidents/`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      // --- THIS IS THE NEW CODE ---
+      const response = await api.get('/incidents/');
 
       // Filter out normal incidents (only show active ones)
       const activeAlerts = response.data.filter(
@@ -59,11 +58,8 @@ export default function AlertPanel() {
     if (!token) return;
 
     try {
-      await axios.patch(
-        `http://127.0.0.1:8000/api/incidents/${incidentId}/`,
-        { status: "resolved" }, // You may need to adjust this field according to your backend schema
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      // --- THIS IS THE NEW CODE (FIXED) ---
+      await api.patch(`/incidents/${incidentId}/`, { status: "resolved" });
       // Remove acknowledged alert from UI
       setAlerts((prev) => prev.filter((alert) => alert.id !== incidentId));
     } catch (err) {

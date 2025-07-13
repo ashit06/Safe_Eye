@@ -1,9 +1,10 @@
 'use client';
 
 import { useState, FormEvent, ChangeEvent } from "react";
-import axios from "axios";
-
 import { useRouter } from "next/navigation";
+import api from '@/lib/api'; // Use the centralized api instance
+import { AxiosError } from "axios"; // Keep for detailed error checking
+
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -25,8 +26,8 @@ interface LoginResponse {
 export default function LoginForm() {
   const [showPassword, setShowPassword] = useState(false);
   const [credentials, setCredentials] = useState({
-    username: "",
-    password: "",
+    username: "admin", // Pre-filled for demo purposes
+    password: "admin123", // Pre-filled for demo purposes
   });
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
@@ -39,24 +40,20 @@ export default function LoginForm() {
     setError("");
 
     try {
-      const response = await axios.post<LoginResponse>(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/token/`,
-        {
-          username: credentials.username,
-          password: credentials.password,
-        }
-      );
+      // Use the 'api' instance. The full URL is no longer needed.
+      const response = await api.post<LoginResponse>('/token/', credentials);
 
       storeAuthTokens(response.data.access, response.data.refresh);
       router.push("/dashboard");
     } catch (err) {
       console.error("Login error:", err);
-      if (axios.isAxiosError(err)) {
+      // Update the error check to use instanceof
+      if (err instanceof AxiosError) {
         if (err.response?.status === 401) {
           setError("Invalid username or password. Please try again.");
         } else if (err.response?.status === 400) {
           setError("Please provide both username and password.");
-        } else if (err.code === "ERR_NETWORK") {
+        } else if (!err.response) {
           setError("Unable to connect to the server. Check your connection.");
         } else {
           setError("An unexpected error occurred. Please try again.");
@@ -92,7 +89,6 @@ export default function LoginForm() {
             </p>
             <p className="mt-1 text-xs text-red-700">
               Note: This portal is strictly for administrative use only.
-              <br /> There is <strong>no sign-up option</strong>.
             </p>
           </div>
 

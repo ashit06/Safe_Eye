@@ -4,7 +4,9 @@ import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Upload, Loader2} from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Upload, Loader2, Video, VideoOff } from "lucide-react";
+import api from '@/lib/api'; // Use the centralized api instance
 
 interface Detection {
   label: string;
@@ -16,8 +18,7 @@ export default function UnifiedDetection() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [detections, setDetections] = useState<Detection[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-
-  const [wsConnected, setWsConnected] = useState(false);
+  const [isStreaming, setIsStreaming] = useState(false);
   const [wsError, setWsError] = useState<string | null>(null);
 
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -25,52 +26,49 @@ export default function UnifiedDetection() {
   const wsRef = useRef<WebSocket | null>(null);
   const captureIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  const HTTP_BASE = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
-
-  // Convert http://... to ws://... and append the WebSocket path
-  const API_BASE = HTTP_BASE.replace(/^http/, "ws") + "/ws/detect/";
+  // Use the dedicated WebSocket URL from environment variables
+  const WEBSOCKET_URL = process.env.NEXT_PUBLIC_WEBSOCKET_URL || "ws://127.0.0.1:8000";
 
   const startWebSocket = () => {
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) return;
+    
     setWsError(null);
-    wsRef.current = new WebSocket(API_BASE);
+    // Append the correct path to the base WebSocket URL
+    wsRef.current = new WebSocket(`${WEBSOCKET_URL}/ws/detect/`);
     
     wsRef.current.onopen = () => {
       console.log("WebSocket connected");
-      setWsConnected(true);
+      setIsStreaming(true);
       startCamera();
     };
 
-    wsRef.current.onerror = () => {
-      console.error("WebSocket error");
-      setWsError("WebSocket connection failed.");
-      wsRef.current?.close();
+    wsRef.current.onerror = (event) => {
+      console.error("WebSocket error:", event);
+      setWsError("WebSocket connection failed. Please check the server and your connection.");
+      setIsStreaming(false);
     };
 
     wsRef.current.onclose = () => {
       console.log("WebSocket closed");
-      setWsConnected(false);
+      setIsStreaming(false);
       stopCamera();
     };
 
-    // 🔥 Here is the important update for receiving detection data
+    // FIX 1: The backend sends 'predictions', not 'detections'.
     wsRef.current.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
         if (data.type === "detections") {
-          setDetections(data.detections || []);
-        } else if (data.type === "connection_established" || data.type === "status") {
-          console.log(data.message);
+          setDetections(data.predictions || []);
         }
       } catch (err) {
-        console.error("Invalid message format", err);
+        console.error("Invalid message format from WebSocket", err);
       }
     };
   };
 
   const stopWebSocket = () => {
     wsRef.current?.close();
-    setWsConnected(false);
-    stopCamera();
   };
 
   const startCamera = async () => {
@@ -79,49 +77,45 @@ export default function UnifiedDetection() {
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         videoRef.current.play();
-
-        captureIntervalRef.current = setInterval(() => {
-          sendFrame();
-        }, 500); // capture every 500ms
+        // Start sending frames after a short delay
+        setTimeout(() => {
+            captureIntervalRef.current = setInterval(sendFrame, 500); // Send frame every 500ms
+        }, 500);
       }
     } catch (err) {
       console.error("Error accessing camera:", err);
+      setWsError("Could not access camera. Please grant permission.");
+      stopWebSocket();
     }
   };
 
   const stopCamera = () => {
-    if (videoRef.current?.srcObject) {
-      const tracks = (videoRef.current.srcObject as MediaStream).getTracks();
-      tracks.forEach(track => track.stop());
-      videoRef.current.srcObject = null;
-    }
     if (captureIntervalRef.current) {
       clearInterval(captureIntervalRef.current);
+      captureIntervalRef.current = null;
+    }
+    if (videoRef.current?.srcObject) {
+      const stream = videoRef.current.srcObject as MediaStream;
+      stream.getTracks().forEach(track => track.stop());
+      videoRef.current.srcObject = null;
     }
   };
 
+  // FIX 2: The backend expects a JSON object with a base64 image string.
   const sendFrame = () => {
-    if (!videoRef.current || !canvasRef.current || !wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
-      console.log("Skipping frame send, something not ready");
+    if (!videoRef.current || !canvasRef.current || wsRef.current?.readyState !== WebSocket.OPEN) {
       return;
     }
-
-    const ctx = canvasRef.current.getContext("2d");
-    if (!ctx) return;
-
-    ctx.drawImage(videoRef.current, 0, 0, canvasRef.current.width, canvasRef.current.height);
-    
-    canvasRef.current.toBlob((blob) => {
-      if (blob) {
-        blob.arrayBuffer().then(buffer => {
-          wsRef.current?.send(buffer);
-          console.log("Frame sent");
-        });
-      }
-    }, 'image/jpeg', 0.7);
+    const context = canvasRef.current.getContext('2d');
+    if (context) {
+      context.drawImage(videoRef.current, 0, 0, 640, 480);
+      const dataUrl = canvasRef.current.toDataURL('image/jpeg');
+      wsRef.current.send(JSON.stringify({ image: dataUrl }));
+    }
   };
 
   useEffect(() => {
+    // Cleanup function to close WebSocket and camera when component unmounts
     return () => {
       stopWebSocket();
     };
@@ -134,6 +128,7 @@ export default function UnifiedDetection() {
     setDetections([]);
   };
 
+  // FIX 3: This function now uses the central 'api' instance instead of fetch.
   const handleManualDetect = async () => {
     if (!selectedFile) return;
     setIsLoading(true);
@@ -143,88 +138,82 @@ export default function UnifiedDetection() {
     formData.append("image", selectedFile);
 
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/ai/incident/`, {
-        method: "POST",
-        body: formData,
+      const res = await api.post('/ai/incident/', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
       });
-      if (res.ok) {
-        const data = await res.json();
-        setDetections(data.detections || []);
-      } else {
-        console.error("Manual detect error", res.statusText);
-      }
+      setDetections(res.data.detections || []);
     } catch (err) {
-      console.error(err);
+      console.error("Manual detection error:", err);
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>Unified AI Detection</CardTitle>
-          <CardDescription>Stream live video or upload image for AI analysis.</CardDescription>
-        </CardHeader>
-        <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Live WebSocket Stream */}
-          <div>
-            <h3 className="text-lg font-semibold mb-3">Live Stream</h3>
-            <div className="mb-4 flex items-center gap-4">
-              <Button onClick={wsConnected ? stopWebSocket : startWebSocket}>
-                {wsConnected ? "Stop Stream" : "Start Stream"}
-              </Button>
-              <Badge variant={wsConnected ? "default" : "secondary"}>
-                {wsConnected ? "🟢 Connected" : "⚪ Disconnected"}
-              </Badge>
-            </div>
-            {wsError && <p className="text-red-500">{wsError}</p>}
-            <div className="aspect-video bg-gray-900 rounded-lg flex items-center justify-center overflow-hidden">
-              <video ref={videoRef} autoPlay muted className="w-full h-full object-cover" />
-              <canvas ref={canvasRef} width="640" height="480" style={{ display: 'none' }} />
-            </div>
+    <Card>
+      <CardHeader>
+        <CardTitle>Unified AI Detection</CardTitle>
+        <CardDescription>Stream live video or upload an image for AI analysis.</CardDescription>
+      </CardHeader>
+      <CardContent className="grid md:grid-cols-2 gap-6">
+        {/* Live Stream Section */}
+        <div className="space-y-4">
+          <h3 className="font-semibold text-lg">Live Stream</h3>
+          <div className="flex items-center gap-4">
+            <Button onClick={isStreaming ? stopWebSocket : startWebSocket}>
+              {isStreaming ? <VideoOff className="mr-2 h-4 w-4" /> : <Video className="mr-2 h-4 w-4" />}
+              {isStreaming ? "Stop Stream" : "Start Stream"}
+            </Button>
+            <Badge variant={isStreaming ? "default" : "secondary"}>
+              {isStreaming ? "● Live" : "Offline"}
+            </Badge>
           </div>
-
-          {/* Manual Detection */}
-          <div>
-            <h3 className="text-lg font-semibold mb-3">Manual Detection</h3>
-            <div className="flex items-center gap-4 mb-4">
-              <input
-                type="file"
-                accept="image/*"
-                onChange={handleFileChange}
-                disabled={isLoading}
-                className="file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-              />
-              <Button onClick={handleManualDetect} disabled={!selectedFile || isLoading}>
-                {isLoading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Upload className="h-4 w-4 mr-2" />}
-                Detect
-              </Button>
-            </div>
-            <div className="aspect-video bg-gray-100 rounded-lg flex items-center justify-center">
-              {previewUrl ? (
-                <img src={previewUrl} alt="Preview" className="w-full h-full object-contain" />
-              ) : (
-                <div className="text-gray-400 text-center">
-                  <Upload className="h-12 w-12 mx-auto mb-2" />
-                  <p>Upload an image to see results</p>
-                </div>
-              )}
-            </div>
-            {detections.length > 0 && (
-              <div className="mt-4">
-                <h3 className="font-bold">Detections:</h3>
-                <ul className="list-disc list-inside">
-                  {detections.map((det, i) => (
-                    <li key={i}>{det.label} ({(det.confidence * 100).toFixed(1)}%)</li>
-                  ))}
-                </ul>
+          {wsError && <p className="text-sm text-red-600">{wsError}</p>}
+          <div className="aspect-video bg-slate-900 rounded-lg overflow-hidden relative">
+            <video ref={videoRef} playsInline autoPlay muted className="w-full h-full object-cover" />
+            <canvas ref={canvasRef} width="640" height="480" className="hidden" />
+            {!isStreaming && (
+              <div className="absolute inset-0 flex items-center justify-center text-slate-400">
+                <p>Camera is off</p>
               </div>
             )}
           </div>
+        </div>
+        
+        {/* Manual Upload Section */}
+        <div className="space-y-4">
+          <h3 className="font-semibold text-lg">Manual Detection</h3>
+          <div className="flex items-center gap-4">
+            <Input type="file" accept="image/*" onChange={handleFileChange} disabled={isLoading} />
+            <Button onClick={handleManualDetect} disabled={!selectedFile || isLoading}>
+              {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
+              Detect
+            </Button>
+          </div>
+          <div className="aspect-video bg-slate-100 rounded-lg flex items-center justify-center">
+            {previewUrl ? (
+              <img src={previewUrl} alt="Upload preview" className="max-h-full max-w-full object-contain" />
+            ) : (
+              <div className="text-center text-slate-500">
+                <Upload className="mx-auto h-10 w-10 mb-2" />
+                <p>Upload an image to analyze</p>
+              </div>
+            )}
+          </div>
+        </div>
+      </CardContent>
+      {detections.length > 0 && (
+        <CardContent>
+            <h3 className="font-bold text-lg mb-2">Detection Results:</h3>
+            <div className="flex flex-wrap gap-2">
+            {detections.map((det, i) => (
+                <Badge key={i} variant="destructive" className="text-base">
+                {det.label} ({(det.confidence * 100).toFixed(1)}%)
+                </Badge>
+            ))}
+            </div>
         </CardContent>
-      </Card>
-    </div>
+        )}
+    </Card>
   );
 }

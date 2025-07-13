@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useEffect } from "react";
-import axios, { AxiosError } from "axios";
 import { useRouter } from "next/navigation";
+import api from '@/lib/api'; // Use the centralized api instance
 
 import { Button } from "@/components/ui/button";
 import {
@@ -31,15 +31,15 @@ import {
 } from "@/components/ui/select";
 import { Search, Download, Eye, Loader2 } from "lucide-react";
 
-import { getAuthToken, clearAuthData } from "@/lib/auth";
+import { getAuthToken } from "@/lib/auth";
 
+// Define a more specific type for the incident data we expect from the API
 interface Incident {
   id: number;
   incident_type: string;
-  description: string;
   location: string;
   timestamp: string;
-  reported_by: number;
+  image: string; // The backend provides a full URL to the evidence image
 }
 
 export default function EventRecords() {
@@ -47,41 +47,33 @@ export default function EventRecords() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterType, setFilterType] = useState("all");
-
   const router = useRouter();
-  const token = getAuthToken();
 
   useEffect(() => {
+    // This effect runs once on component mount to fetch the incident list
+    const token = getAuthToken();
     if (!token) {
-      clearAuthData();
       router.push("/login");
-      return;
+      return; // Stop execution if not authenticated
     }
 
-    (async () => {
+    const fetchIncidents = async () => {
       try {
-        const response = await axios.get<Incident[]>(
-          `${process.env.NEXT_PUBLIC_API_URL}/api/incidents/`,
-
-          {
-            headers: { Authorization: `Bearer ${token}` },
-          }
-        );
+        // Use the 'api' instance. No need for the full URL or headers.
+        const response = await api.get<Incident[]>('/incidents/');
         setIncidents(response.data);
-      } catch (err: unknown) {
+      } catch (err) {
+        // The catch block is now much simpler.
+        // Our api.ts interceptor handles 401 errors automatically.
+        // This block will catch other errors, like network failures.
         console.error("Error fetching incidents:", err);
-        if (axios.isAxiosError(err)) {
-          const axiosError = err as AxiosError;
-          if (axiosError.response?.status === 401) {
-            clearAuthData();
-            router.push("/login");
-          }
-        }
       } finally {
         setLoading(false);
       }
-    })();
-  }, [token, router]);
+    };
+
+    fetchIncidents();
+  }, [router]); // Dependency array ensures this runs once
 
   const filteredIncidents = incidents.filter((incident) => {
     const searchMatch =
@@ -91,13 +83,15 @@ export default function EventRecords() {
 
     const filterMatch =
       filterType === "all" ||
-      incident.incident_type.toLowerCase() === filterType.toLowerCase();
+      incident.incident_type.toLowerCase() === filterType;
 
     return searchMatch && filterMatch;
   });
 
   const getBadgeVariant = (type: string): "default" | "destructive" => {
-    return type === "accident" ? "destructive" : "default";
+    // Customize badge color based on incident type
+    const destructiveTypes = ["accident", "robbery", "murder"];
+    return destructiveTypes.includes(type.toLowerCase()) ? "destructive" : "default";
   };
 
   return (
@@ -155,7 +149,7 @@ export default function EventRecords() {
                     <TableHead>Type</TableHead>
                     <TableHead>Location</TableHead>
                     <TableHead>Timestamp</TableHead>
-                    <TableHead>Actions</TableHead>
+                    <TableHead>Evidence</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -173,9 +167,11 @@ export default function EventRecords() {
                           {new Date(incident.timestamp).toLocaleString()}
                         </TableCell>
                         <TableCell>
-                          <Button variant="ghost" size="sm">
-                            <Eye className="h-4 w-4" />
-                          </Button>
+                          <a href={incident.image} target="_blank" rel="noopener noreferrer">
+                            <Button variant="ghost" size="sm">
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                          </a>
                         </TableCell>
                       </TableRow>
                     ))

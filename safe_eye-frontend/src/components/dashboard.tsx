@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import axios from "axios"; // ✅ FIXED
+import api from '@/lib/api'; // Correctly using the centralized api instance
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -18,59 +18,60 @@ import {
   LogOut,
 } from "lucide-react";
 
-import LiveDetection from "@/components/UnifiedDetection";
-import EventRecords from "@/components/event-records";
-import AlertPanel from "@/components/alert-panel";
-import SystemSettings from "@/components/system-settings";
+// Corrected relative paths for components within the same directory
+import LiveDetection from "./UnifiedDetection";
+import EventRecords from "./event-records";
+import AlertPanel from "./alert-panel";
+import SystemSettings from "./system-settings";
 
 import { getAuthToken, clearAuthData } from "@/lib/auth";
+
+// Define a more specific type for the incident data we expect
+interface IncidentData {
+  incident_type: string;
+  timestamp: string;
+}
 
 export default function DashboardPage() {
   const [activeAlerts, setActiveAlerts] = useState(0);
   const [eventsToday, setEventsToday] = useState(0);
-  const [cameras, setCameras] = useState(0);
-  const [coverageAreas, setCoverageAreas] = useState(0);
+  const [cameras] = useState(12); // Static value
+  const [coverageAreas] = useState(8); // Static value
   const [systemStatus, setSystemStatus] = useState<"Active" | "Error">("Active");
   const [defaultTab] = useState<"detection">("detection");
   const router = useRouter();
-  const token = getAuthToken();
 
   useEffect(() => {
+    // This effect runs once on component mount to fetch initial data
+    const token = getAuthToken();
     if (!token) {
-      clearAuthData();
       router.push("/login");
+      return; // Stop execution if not authenticated
     }
-  }, [router, token]); // ✅ includes router
 
-  useEffect(() => {
-    if (!token) return;
-
-    (async () => {
+    const fetchData = async () => {
       try {
-        const res = await axios.get(`${process.env.NEXT_PUBLIC_API_URL}/api/incidents/`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const res = await api.get<IncidentData[]>('/incidents/');
+        const incidents = res.data;
 
-        const incidents = res.data as Array<{ incident_type: string }>;
-        setEventsToday(incidents.length);
+        const today = new Date().toDateString();
+        const todaysEvents = incidents.filter(i => new Date(i.timestamp).toDateString() === today);
+        
+        setEventsToday(todaysEvents.length);
         setActiveAlerts(incidents.filter(i => i.incident_type !== "normal").length);
-        setCameras(12);
-        setCoverageAreas(8);
-      } catch (err: unknown) {
-        console.error("Error fetching data:", err);
-        if (axios.isAxiosError(err)) {
-          if (err.response?.status === 401) {
-            clearAuthData();
-            router.push("/login");
-          } else {
-            setSystemStatus("Error");
-          }
-        } else {
-          setSystemStatus("Error");
-        }
+        setSystemStatus("Active");
+
+      } catch (err) {
+        // The catch block is now much simpler.
+        // Our api.ts interceptor handles 401 errors automatically.
+        // This block will catch other errors, like network failures.
+        console.error("Error fetching dashboard data:", err);
+        setSystemStatus("Error");
       }
-    })();
-  }, [token, router]);
+    };
+
+    fetchData();
+  }, [router]); // Dependency array ensures this runs once on load
 
   const handleLogout = () => {
     clearAuthData();
@@ -99,7 +100,7 @@ export default function DashboardPage() {
               {activeAlerts > 0 && (
                 <Badge
                   variant="destructive"
-                  className="ml-1 h-5 w-5 rounded-full p-0 text-xs"
+                  className="ml-1 h-5 w-5 rounded-full p-0 text-xs flex items-center justify-center"
                 >
                   {activeAlerts}
                 </Badge>

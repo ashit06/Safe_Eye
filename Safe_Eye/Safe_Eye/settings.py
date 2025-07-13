@@ -25,8 +25,10 @@ ALLOWED_HOSTS = ['safe-eye-backend.onrender.com', 'localhost', '127.0.0.1']
 
 # List of trusted origins for POST requests (e.g., from your frontend)
 CSRF_TRUSTED_ORIGINS = [
-    "https://safe-eye-steo.vercel.app",  # Your frontend URL on Vercel
-    "https://safe-eye-backend.onrender.com", # Your backend URL on Render
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "https://safe-eye-steo.vercel.app", # Your deployed frontend URL
+    "https://safe-eye-backend.onrender.com", # Your deployed backend URL
 ]
 
 # List of origins that are allowed to make cross-site HTTP requests.

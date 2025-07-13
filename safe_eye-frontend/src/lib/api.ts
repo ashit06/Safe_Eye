@@ -1,10 +1,13 @@
 import axios from 'axios';
 import { getAuthToken, clearAuthData } from './auth';
 
-const API_URL = 'http://127.0.0.1:8000/api/';
+// Read the base URL from environment variables.
+// Fallback to localhost for local development.
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
 
 const api = axios.create({
-  baseURL: API_URL,
+  // Construct the full API URL
+  baseURL: `${API_BASE_URL}/api/`,
 });
 
 // Automatically attach token
