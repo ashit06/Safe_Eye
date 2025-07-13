@@ -11,46 +11,32 @@ load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# --- SECURITY ---
+# These are loaded from environment variables on Render
 SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-a-very-insecure-default-key-for-dev')
 DEBUG = os.environ.get('DEBUG', 'False').lower() == 'true'
 
+# --- HOSTS ---
+# Defines which domain names this Django site can serve.
 ALLOWED_HOSTS = ['safe-eye-backend.onrender.com', 'localhost', '127.0.0.1']
 
-# --- CORS & CSRF CONFIGURATION (MAXIMUM DEBUGGING) ---
+# --- CORS & CSRF CONFIGURATION (PRODUCTION) ---
 
-# This is a temporary setting to diagnose the connection issue.
-# It tells the browser that it's safe to accept requests from ANY origin.
-CORS_ALLOW_ALL_ORIGINS = True
-
-# This allows browsers to send credentials (like cookies) with cross-origin requests.
+# A specific list of origins that are allowed to make cross-site HTTP requests.
+# This is the secure, production-ready setting.
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "https://safe-eye-steo.vercel.app", # Your deployed frontend URL
+]
 CORS_ALLOW_CREDENTIALS = True
 
-# Explicitly allow all common methods and headers. This ensures that the browser's
-# preflight (OPTIONS) request gets a permissive response.
-CORS_ALLOW_METHODS = [
-    "DELETE",
-    "GET",
-    "OPTIONS",
-    "PATCH",
-    "POST",
-    "PUT",
-]
-CORS_ALLOW_HEADERS = [
-    "accept",
-    "authorization",
-    "content-type",
-    "user-agent",
-    "x-csrftoken",
-    "x-requested-with",
-    "origin", # Explicitly add origin
-]
-
-# We keep these settings here for when we turn off the debug setting above.
+# A list of hosts that are trusted for cross-site requests that modify data (e.g., POST).
 CSRF_TRUSTED_ORIGINS = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
-    "https://safe-eye-steo.vercel.app",
-    "https://safe-eye-backend.onrender.com",
+    "https://safe-eye-steo.vercel.app", # Your deployed frontend URL
+    "https://safe-eye-backend.onrender.com", # Your deployed backend URL
 ]
 
 
@@ -73,8 +59,7 @@ INSTALLED_APPS = [
     'ai_model',
 ]
 
-# Ensure corsheaders.middleware.CorsMiddleware is placed high up,
-# especially before CommonMiddleware.
+# Ensure corsheaders.middleware.CorsMiddleware is placed high up.
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
@@ -108,6 +93,7 @@ TEMPLATES = [
 WSGI_APPLICATION = 'Safe_Eye.wsgi.application'
 ASGI_APPLICATION = 'Safe_Eye.asgi.application'
 
+# This configuration is loaded from the REDIS_URL environment variable on Render.
 CHANNEL_LAYERS = {
     'default': {
         'BACKEND': 'channels_redis.core.RedisChannelLayer',
@@ -117,6 +103,7 @@ CHANNEL_LAYERS = {
     },
 }
 
+# This configuration is loaded from the DATABASE_URL environment variable on Render.
 DATABASES = {
     'default': dj_database_url.config(
         default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}",
