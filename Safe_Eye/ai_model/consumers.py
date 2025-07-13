@@ -1,50 +1,64 @@
+# ai_model/consumers.py
+
 import json
-import cv2
+import base64
 import numpy as np
-from channels.generic.websocket import AsyncWebsocketConsumer
-from .yolo_inference import YOLOInference
-import logging
+import cv2
+from channels.generic.websocket import WebsocketConsumer
+from .camera_detection import CameraDetectionService
 
-logger = logging.getLogger(__name__)
+class DetectionConsumer(WebsocketConsumer):
+    """
+    WebSocket consumer with cleaner, more focused logging for debugging.
+    """
+    def connect(self):
+        self.accept()
+        print("✅ [Consumer] WebSocket connection established.")
+        try:
+            self.detection_service = CameraDetectionService()
+            print("✅ [Consumer] CameraDetectionService initialized successfully.")
+        except Exception as e:
+            print(f"❌ [Consumer] FATAL: Could not initialize CameraDetectionService: {e}")
 
-class DetectionConsumer(AsyncWebsocketConsumer):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.yolo_model = YOLOInference()
+    def disconnect(self, close_code):
+        print(f"❌ [Consumer] WebSocket connection closed with code: {close_code}")
+        pass
 
-    async def connect(self):
-        await self.accept()
-        logger.info("WebSocket connected")
-        await self.send(text_data=json.dumps({
-            'type': 'connection_established',
-            'message': 'WebSocket connected and YOLO model loaded'
-        }))
-
-    async def disconnect(self, close_code):
-        logger.info(f"WebSocket disconnected: {close_code}")
-
-    async def receive(self, text_data=None, bytes_data=None):
-        if text_data:
+    def receive(self, text_data):
+        # This log confirms data is received without printing the content.
+        print(f"➡️ [Consumer] Received frame from client (Size: {len(text_data)} bytes). Processing...")
+        
+        try:
+            # Decode and process the image
             data = json.loads(text_data)
-            # You can still handle manual commands if needed
-            logger.info(f"Received text_data: {data}")
+            image_data = data.get('image')
+            
+            if not image_data:
+                print("⚠️ [Consumer] Message received but no image data found.")
+                return
 
-        elif bytes_data:
-            logger.info("Received frame from frontend")
-            try:
-                nparr = np.frombuffer(bytes_data, np.uint8)
-                frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-                if frame is None:
-                    logger.error("Invalid frame received (decode failed)")
-                    return
+            header, encoded = image_data.split(",", 1)
+            decoded_data = base64.b64decode(encoded)
+            np_arr = np.frombuffer(decoded_data, np.uint8)
+            frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
 
-                detections = self.yolo_model.detect_accidents(frame)
-                
-                # Send detections back to frontend
-                await self.send(text_data=json.dumps({
-                    "type": "detections",
-                    "detections": detections
-                }))
+            if frame is None:
+                print("⚠️ [Consumer] Frame is None after decoding.")
+                return
 
-            except Exception as e:
-                logger.exception(f"Error processing frame: {e}")
+            # Call the detection service
+            detections = self.detection_service.process_frame(frame)
+            
+            # This is the most important log. If you see this, detection was successful.
+            if detections:
+                print(f"✅ [Consumer] Detection successful. Found {len(detections)} objects.")
+            
+            # Send results back to the client
+            self.send(text_data=json.dumps({
+                'type': 'detections',
+                'predictions': detections
+            }))
+        
+        except Exception as e:
+            # This will catch any Python-level errors during processing.
+            print(f"❌ [Consumer] An unexpected error occurred in receive method: {e}")

@@ -59,7 +59,7 @@ export default function UnifiedDetection() {
       try {
         const data = JSON.parse(event.data);
         if (data.type === "detections") {
-          setDetections(data.predictions || []);
+          setDetections(data.predictions || []); // This line is now fixed
         }
       } catch (err) {
         console.error("Invalid message format from WebSocket", err);

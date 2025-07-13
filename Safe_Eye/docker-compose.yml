@@ -1,0 +1,17 @@
+# This file sets up the services your backend needs to run locally.
+# In this case, it's just a Redis server for WebSockets.
+
+version: '3.8'
+
+services:
+  # This defines the Redis service
+  redis:
+    image: "redis:alpine" # Use a lightweight version of Redis
+    container_name: safe_eye_redis # A friendly name for the container
+    ports:
+      - "6379:6379" # Map the container's port 6379 to your computer's port 6379
+    volumes:
+      - redis_data:/data # This saves your Redis data even if you stop the container
+
+volumes:
+  redis_data:

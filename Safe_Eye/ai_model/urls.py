@@ -1,17 +1,13 @@
-# Safe_Eye/ai_model/urls.py
-
 from django.urls import path
-from .views import detect_accident, start_camera_detection, stop_camera_detection, get_camera_status, video_feed
+# We update the imports to only include the views that are still active.
+from .views import detect_accident, video_feed
 
 urlpatterns = [
-    # POST /api/ai/detect/ to run your model
+    # This URL is for your manual image upload.
     path('incident/', detect_accident, name='incident'),
     
-    # MJPEG streaming endpoint
+    # This URL is for the separate MJPEG video streaming feature.
     path('video-feed/', video_feed, name='video_feed'),
     
-    # Camera detection endpoints
-    path('camera/start/', start_camera_detection, name='start_camera'),
-    path('camera/stop/', stop_camera_detection, name='stop_camera'),
-    path('camera/status/', get_camera_status, name='camera_status'),
+    # The URLs for the old camera control views have been removed to prevent import errors.
 ]
