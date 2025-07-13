@@ -6,6 +6,8 @@ djangorestframework-simplejwt>=5.3.1
 # Channels for WebSocket & ASGI
 channels>=4.0.0
 daphne>=4.1.0
+channels_redis
+
 
 # CORS headers
 django-cors-headers>=4.3.1
