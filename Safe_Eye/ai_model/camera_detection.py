@@ -8,6 +8,9 @@ import requests
 import json
 from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
+from datetime import datetime
+from django.core.files.base import ContentFile
+from incidents.models import Incident
 
 class CameraDetectionService:
     def __init__(self):
@@ -129,48 +132,29 @@ class CameraDetectionService:
     from datetime import datetime
 
     def _handle_accident_detection(self, detections, frame):
-        print(f"🧠 _handle_accident_detection triggered with {len(detections)} detections")
-
-
+        """
+        Creates an Incident record directly in the database.
+        This is more secure and efficient than making an API call to itself.
+        """
+        print(f"🧠 _handle_accident_detection triggered with {len(detections)} detections.")
         try:
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            frame_path = f"media/accident_frames/accident_{timestamp}.jpg"
-            os.makedirs(os.path.dirname(frame_path), exist_ok=True)
-            cv2.imwrite(frame_path, frame)
+            primary_detection = detections[0]
 
-            print(f"📸 Accident frame saved: {frame_path}")
+            _, buffer = cv2.imencode('.jpg', frame)
+            image_file_name = f"incident_{int(time.time())}.jpg"
+            image_content = ContentFile(buffer.tobytes(), name=image_file_name)
 
-            # Save to DB via Django API
-            incident_data = {
-                'incident_type': 'accident',
-                'description': 'Accident detected via AI',
-                'location': 'Live Camera',
-                'confidence': 0.92,
-                'image': open(frame_path, 'rb'),  # NOTE: Still not used because you are using `json=`
-            }
-
-            print("📦 Sending data to _save_incident_to_database...")  # ← Add this line
-
-            self._save_incident_to_database(incident_data)
-
-            # WebSocket broadcast
-            print("📡 Broadcasting WebSocket alert...")
-            channel_layer = get_channel_layer()
-            async_to_sync(channel_layer.group_send)(
-                "alerts",
-                {
-                    "type": "accident.alert",
-                    "message": {
-                        "location": "Live Camera",
-                        "timestamp": timestamp,
-                        "confidence": 0.92,
-                        "image": f"/media/accident_frames/accident_{timestamp}.jpg",
-                    },
-                },
+            Incident.objects.create(
+                incident_type=primary_detection.get('label', 'Accident').lower(),
+                description='Incident automatically detected by live camera feed.',
+                location='Live Camera Feed',
+                confidence=primary_detection.get('confidence', 0.0),
+                image=image_content,
+                reported_by=None
             )
-
+            print(f"✅ Incident saved directly to the database with image {image_file_name}.")
         except Exception as e:
-            print(f"❌ Error handling accident detection: {e}")
+            print(f"❌ Error while saving incident directly to database: {e}")
 
 
 

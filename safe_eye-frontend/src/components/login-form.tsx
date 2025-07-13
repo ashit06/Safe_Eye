@@ -1,5 +1,3 @@
-console.log("Login API URL:", `${process.env.NEXT_PUBLIC_API_URL}/api/token/`);
-
 'use client';
 
 import { useState, FormEvent, ChangeEvent } from "react";

@@ -2,11 +2,35 @@ services:
   - type: web
     name: safe-eye-backend
     env: python
-    buildCommand: pip install -r requirements.txt
-    startCommand: daphne Safe_Eye.asgi:application
+    plan: free
+    buildCommand: |
+      pip install -r requirements.txt
+      python manage.py collectstatic --noinput
+      python manage.py migrate
+    startCommand: gunicorn Safe_Eye.asgi:application -k uvicorn.workers.UvicornWorker -w 4
     envVars:
-      - key: DJANGO_SETTINGS_MODULE
-        value: Safe_Eye.settings
+      - key: PYTHON_VERSION
+        value: 3.11.4
       - key: SECRET_KEY
-        value: your_secret_key
-    autoDeploy: true
+        generateValue: true
+      - key: DATABASE_URL
+        fromDatabase:
+          name: safe-eye-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: safe-eye-redis
+          property: connectionString
+      - key: DEBUG
+        value: False
+
+  - type: pserv
+    name: safe-eye-db
+    plan: free
+    databaseName: safe_eye_db
+    user: safe_eye_user
+
+  - type: redis
+    name: safe-eye-redis
+    plan: free
