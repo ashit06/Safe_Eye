@@ -1,13 +1,20 @@
+# render.yaml
+
 services:
+  # The Web Service for handling HTTP and WebSocket traffic
   - type: web
     name: safe-eye-backend
     env: python
     plan: free
+    # THIS IS THE UPDATED BUILD COMMAND
     buildCommand: |
       pip install -r requirements.txt
-      python manage.py collectstatic --noinput
+      python manage.py collectstatic --no-input --clear
       python manage.py migrate
-    startCommand: gunicorn Safe_Eye.asgi:application -k uvicorn.workers.UvicornWorker -w 4
+      # This command creates the admin user only if it doesn't already exist
+      python manage.py shell -c "from django.contrib.auth import get_user_model; User = get_user_model(); User.objects.filter(username='admin').exists() or User.objects.create_superuser('admin', 'admin@example.com', 'admin123')"
+    # The start command remains the same
+    startCommand: daphne -b 0.0.0.0 -p $PORT Safe_Eye.asgi:application
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.4
@@ -25,12 +32,14 @@ services:
       - key: DEBUG
         value: False
 
+  # The PostgreSQL Database service
   - type: pserv
     name: safe-eye-db
     plan: free
     databaseName: safe_eye_db
     user: safe_eye_user
 
+  # The Redis instance for the Channels layer
   - type: redis
     name: safe-eye-redis
     plan: free
