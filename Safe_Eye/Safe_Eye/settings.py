@@ -94,15 +94,11 @@ WSGI_APPLICATION = 'Safe_Eye.wsgi.application'
 ASGI_APPLICATION = 'Safe_Eye.asgi.application'
 
 # This configuration is loaded from the REDIS_URL environment variable on Render.
-redis_url = os.environ.get('REDIS_URL', 'redis://localhost:6379')
 CHANNEL_LAYERS = {
     'default': {
         'BACKEND': 'channels_redis.core.RedisChannelLayer',
         'CONFIG': {
-            "hosts": [{
-                "address": redis_url,
-                "ssl": True,
-            }],
+            "hosts": [os.environ.get('REDIS_URL', 'redis://localhost:6379')],
         },
     },
 }
