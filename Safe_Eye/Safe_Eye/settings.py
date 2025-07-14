@@ -5,40 +5,31 @@ from pathlib import Path
 import dj_database_url
 from dotenv import load_dotenv
 from datetime import timedelta
+import certifi # Import the certifi package
 
-# Load environment variables from a .env file for local development
 load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# --- SECURITY ---
-# These are loaded from environment variables on Render
 SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-a-very-insecure-default-key-for-dev')
 DEBUG = os.environ.get('DEBUG', 'False').lower() == 'true'
 
-# --- HOSTS ---
-# Defines which domain names this Django site can serve.
 ALLOWED_HOSTS = ['safe-eye-backend.onrender.com', 'localhost', '127.0.0.1']
 
 # --- CORS & CSRF CONFIGURATION (PRODUCTION) ---
-
-# A specific list of origins that are allowed to make cross-site HTTP requests.
-# This is the secure, production-ready setting.
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
-    "https://safe-eye-steo.vercel.app", # Your deployed frontend URL
+    "https://safe-eye-steo.vercel.app",
 ]
 CORS_ALLOW_CREDENTIALS = True
 
-# A list of hosts that are trusted for cross-site requests that modify data (e.g., POST).
 CSRF_TRUSTED_ORIGINS = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
-    "https://safe-eye-steo.vercel.app", # Your deployed frontend URL
-    "https://safe-eye-backend.onrender.com", # Your deployed backend URL
+    "https://safe-eye-steo.vercel.app",
+    "https://safe-eye-backend.onrender.com",
 ]
-
 
 # --- APPLICATION DEFINITION ---
 INSTALLED_APPS = [
@@ -59,7 +50,6 @@ INSTALLED_APPS = [
     'ai_model',
 ]
 
-# Ensure corsheaders.middleware.CorsMiddleware is placed high up.
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
@@ -93,17 +83,31 @@ TEMPLATES = [
 WSGI_APPLICATION = 'Safe_Eye.wsgi.application'
 ASGI_APPLICATION = 'Safe_Eye.asgi.application'
 
-# This configuration is loaded from the REDIS_URL environment variable on Render.
+# --- THIS IS THE FINAL FIX ---
+# This configuration explicitly tells the Redis client to use certifi's
+# certificate bundle for SSL verification.
+
+# Get the base URL from the environment
+redis_url = os.environ.get('REDIS_URL')
+
+if redis_url and redis_url.startswith('rediss://'):
+    # If we are in production (Render) and using a secure URL,
+    # append the SSL options to the URL.
+    redis_url += f'?ssl_cert_reqs=required&ssl_ca_certs={certifi.where()}'
+else:
+    # If we are in local development, use the standard non-SSL URL
+    redis_url = 'redis://localhost:6379'
+
 CHANNEL_LAYERS = {
     'default': {
         'BACKEND': 'channels_redis.core.RedisChannelLayer',
         'CONFIG': {
-            "hosts": [os.environ.get('REDIS_URL', 'redis://localhost:6379')],
+            "hosts": [redis_url],
         },
     },
 }
 
-# This configuration is loaded from the DATABASE_URL environment variable on Render.
+
 DATABASES = {
     'default': dj_database_url.config(
         default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}",

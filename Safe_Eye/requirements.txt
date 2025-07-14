@@ -6,7 +6,6 @@ djangorestframework-simplejwt>=5.3.1
 # Channels for WebSocket & ASGI
 channels>=4.0.0
 daphne>=4.1.0
-channels_redis
 
 
 # CORS headers
@@ -36,3 +35,8 @@ dj-database-url>=2.1.0
 channels_redis>=4.2.0
 python-dotenv>=1.0.1
 uvicorn>=0.29.0
+
+
+redis>=4.2.0
+channels-redis>=4.0.0
+certifi>=2024.7.4
