@@ -1,41 +1,31 @@
+# Corrected render.yaml for deployment with external Redis
+
 services:
   # --------------------------------------------------------------------
   # 1. The Web Service (for handling HTTP and WebSocket connections)
-  #    This service runs Daphne.
   # --------------------------------------------------------------------
   - type: web
     name: safe-eye-backend
     env: python
-    plan: free
+    plan: free # Note: Render's free plans may spin down due to inactivity.
     buildCommand: |
       pip install -r requirements.txt
       python manage.py collectstatic --no-input --clear
       python manage.py migrate
-      python manage.py shell -c "from django.contrib.auth import get_user_model; User = get_user_model(); User.objects.filter(username='admin').exists() or User.objects.create_superuser('admin', 'admin@example.com', 'admin123')"
     startCommand: daphne -b 0.0.0.0 -p $PORT Safe_Eye.asgi:application
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.4
       - key: SECRET_KEY
-        generateValue: true
+        generateValue: true # Render will securely generate this for you.
       - key: DATABASE_URL
         fromDatabase:
-          name: safe-eye-db
-          property: connectionString
-      - key: REDIS_URL
-        fromService:
-          type: redis
-          name: safe-eye-redis
-          property: connectionString
+          name: safe-eye-db # Links to the database defined below
       - key: DEBUG
         value: False
-      # Add this environment variable to fix the Ultralytics warning
-      - key: YOLO_CONFIG_DIR
-        value: /tmp/Ultralytics
 
   # --------------------------------------------------------------------
-  # 2. The Worker Service (for running background tasks)
-  #    This new service runs Celery.
+  # 2. The Worker Service (for running Celery background tasks)
   # --------------------------------------------------------------------
   - type: worker
     name: celery-worker
@@ -56,27 +46,14 @@ services:
         fromDatabase:
           name: safe-eye-db
           property: connectionString
-      - key: REDIS_URL
-        fromService:
-          type: redis
-          name: safe-eye-redis
-          property: connectionString
       - key: DEBUG
         value: False
-      # Also add the YOLO_CONFIG_DIR here for the worker
-      - key: YOLO_CONFIG_DIR
-        value: /tmp/Ultralytics
 
 # --------------------------------------------------------------------
-# 3. Backend Services (Database and Redis Cache)
+# 3. The PostgreSQL Database Service
 # --------------------------------------------------------------------
 databases:
   - name: safe-eye-db
     databaseName: safe_eye_db
     user: safe_eye_user
-    plan: free
-
-services:
-  - type: redis
-    name: safe-eye-redis
     plan: free

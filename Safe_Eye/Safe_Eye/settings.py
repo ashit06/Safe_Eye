@@ -62,6 +62,7 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
+
 ROOT_URLCONF = 'Safe_Eye.urls'
 
 TEMPLATES = [
@@ -88,24 +89,31 @@ ASGI_APPLICATION = 'Safe_Eye.asgi.application'
 # certificate bundle for SSL verification.
 
 # Get the base URL from the environment
-redis_url = os.environ.get('REDIS_URL')
+REDIS_URL = os.environ.get('REDIS_URL')
 
-if redis_url and redis_url.startswith('rediss://'):
-    # If we are in production (Render) and using a secure URL,
-    # append the SSL options to the URL.
-    redis_url += f'?ssl_cert_reqs=required&ssl_ca_certs={certifi.where()}'
-else:
-    # If we are in local development, use the standard non-SSL URL
-    redis_url = 'redis://localhost:6379'
-
-CHANNEL_LAYERS = {
-    'default': {
-        'BACKEND': 'channels_redis.core.RedisChannelLayer',
-        'CONFIG': {
-            "hosts": [redis_url],
+if REDIS_URL:
+    # This is the crucial fix for the "ssl_cert_reqs" error with Upstash
+    CELERY_BROKER_URL = f"{REDIS_URL}?ssl_cert_reqs=CERT_NONE"
+    
+    CHANNEL_LAYERS = {
+        "default": {
+            "BACKEND": "channels_redis.core.RedisChannelLayer",
+            "CONFIG": {
+                "hosts": [f"{REDIS_URL}?ssl_cert_reqs=CERT_NONE"],
+            },
         },
-    },
-}
+    }
+else:
+    # Fallback for local development
+    CELERY_BROKER_URL = "redis://127.0.0.1:6379"
+    CHANNEL_LAYERS = {
+        "default": {
+            "BACKEND": "channels_redis.core.RedisChannelLayer",
+            "CONFIG": {
+                "hosts": ["redis://127.0.0.1:6379"],
+            },
+        },
+    }
 
 
 DATABASES = {
