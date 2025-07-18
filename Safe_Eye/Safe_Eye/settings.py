@@ -6,6 +6,7 @@ import dj_database_url
 from dotenv import load_dotenv
 from datetime import timedelta
 import certifi # Import the certifi package
+import ssl # Import the ssl module for SSL configuration
 
 load_dotenv()
 
@@ -92,20 +93,22 @@ ASGI_APPLICATION = 'Safe_Eye.asgi.application'
 REDIS_URL = os.environ.get('REDIS_URL')
 
 if REDIS_URL:
-    # This is the crucial fix for the "ssl_cert_reqs" error with Upstash
-    CELERY_BROKER_URL = f"{REDIS_URL}?ssl_cert_reqs=CERT_NONE"
-    
+    # This logic handles the secure 'rediss://' URL for production on Render.
+    # The '?ssl_cert_reqs=CERT_NONE' part is the direct fix for your error.
+    CELERY_BROKER_URL = f"{REDIS_URL}?ssl_cert_reqs={ssl.CERT_NONE}"
+
     CHANNEL_LAYERS = {
         "default": {
             "BACKEND": "channels_redis.core.RedisChannelLayer",
             "CONFIG": {
-                "hosts": [f"{REDIS_URL}?ssl_cert_reqs=CERT_NONE"],
+                "hosts": [f"{REDIS_URL}?ssl_cert_reqs={ssl.CERT_NONE}"],
             },
         },
     }
 else:
-    # Fallback for local development
-    CELERY_BROKER_URL = "redis://127.0.0.1:6379"
+    # This block ensures your app still works for local development
+    # by falling back to a standard, non-secure Redis URL.
+    CELERY_BROKER_URL = "redis://127.0.0.1:6379/0"
     CHANNEL_LAYERS = {
         "default": {
             "BACKEND": "channels_redis.core.RedisChannelLayer",
@@ -114,7 +117,6 @@ else:
             },
         },
     }
-
 
 DATABASES = {
     'default': dj_database_url.config(

@@ -1,57 +1,63 @@
-# Corrected render.yaml for deployment with external Redis
+# Corrected and Optimized render.yaml for Safe Eye Backend
 
 services:
-  # --------------------------------------------------------------------
-  # 1. The Web Service (for handling HTTP and WebSocket connections)
-  # --------------------------------------------------------------------
+  # --------------------------------------------------
+  # Service 1: The Django Web Server (Daphne)
+  # --------------------------------------------------
   - type: web
-    name: safe-eye-backend
+    name: safe-eye-web
     env: python
-    plan: free # Note: Render's free plans may spin down due to inactivity.
+    plan: free # Note: Free plans spin down and may have slower startup times.
+    rootDir: Safe_Eye # Tells Render to run commands from the backend folder
     buildCommand: |
       pip install -r requirements.txt
-      python manage.py collectstatic --no-input --clear
       python manage.py migrate
+      python manage.py collectstatic --no-input
     startCommand: daphne -b 0.0.0.0 -p $PORT Safe_Eye.asgi:application
     envVars:
       - key: PYTHON_VERSION
-        value: 3.11.4
+        value: 3.11.4 # Pinning your Python version is good practice
       - key: SECRET_KEY
-        generateValue: true # Render will securely generate this for you.
+        generateValue: true # Let Render create a secure key
       - key: DATABASE_URL
         fromDatabase:
-          name: safe-eye-db # Links to the database defined below
+          name: safe-eye-db # Links to the database below
       - key: DEBUG
         value: False
+      # The following will be added manually in the Render Dashboard:
+      # - REDIS_URL
+      # - EMAIL_HOST_USER
+      # - EMAIL_HOST_PASSWORD
+      # - etc.
 
-  # --------------------------------------------------------------------
-  # 2. The Worker Service (for running Celery background tasks)
-  # --------------------------------------------------------------------
+  # --------------------------------------------------
+  # Service 2: The Celery Background Worker
+  # --------------------------------------------------
   - type: worker
-    name: celery-worker
+    name: safe-eye-worker
     env: python
     plan: free
-    buildCommand: |
-      pip install -r requirements.txt
-    startCommand: celery -A Safe_Eye worker -l info
+    rootDir: Safe_Eye # Also run commands from the backend folder
+    buildCommand: pip install -r requirements.txt
+    startCommand: celery -A Safe_Eye worker --loglevel=info
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.4
       - key: SECRET_KEY
         fromService:
           type: web
-          name: safe-eye-backend
+          name: safe-eye-web
           envVarKey: SECRET_KEY
       - key: DATABASE_URL
         fromDatabase:
           name: safe-eye-db
-          property: connectionString
       - key: DEBUG
         value: False
+      # Also add your email and Redis vars to the worker manually
 
-# --------------------------------------------------------------------
-# 3. The PostgreSQL Database Service
-# --------------------------------------------------------------------
+# --------------------------------------------------
+# Backend Dependency: PostgreSQL Database
+# --------------------------------------------------
 databases:
   - name: safe-eye-db
     databaseName: safe_eye_db
