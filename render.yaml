@@ -1,5 +1,3 @@
-# Corrected and Optimized render.yaml for Safe Eye Backend
-
 services:
   # --------------------------------------------------
   # Service 1: The Django Web Server (Daphne)
@@ -7,8 +5,8 @@ services:
   - type: web
     name: safe-eye-web
     env: python
-    plan: free # Note: Free plans spin down and may have slower startup times.
-    rootDir: Safe_Eye # Tells Render to run commands from the backend folder
+    plan: free
+    rootDir: Safe_Eye # This is correct for your project structure
     buildCommand: |
       pip install -r requirements.txt
       python manage.py migrate
@@ -16,19 +14,15 @@ services:
     startCommand: daphne -b 0.0.0.0 -p $PORT Safe_Eye.asgi:application
     envVars:
       - key: PYTHON_VERSION
-        value: 3.11.4 # Pinning your Python version is good practice
+        value: 3.11.4
       - key: SECRET_KEY
-        generateValue: true # Let Render create a secure key
+        generateValue: true
       - key: DATABASE_URL
         fromDatabase:
-          name: safe-eye-db # Links to the database below
+          name: safe-eye-db
+          property: connectionString # <-- FIX #1 IS HERE
       - key: DEBUG
         value: False
-      # The following will be added manually in the Render Dashboard:
-      # - REDIS_URL
-      # - EMAIL_HOST_USER
-      # - EMAIL_HOST_PASSWORD
-      # - etc.
 
   # --------------------------------------------------
   # Service 2: The Celery Background Worker
@@ -37,7 +31,7 @@ services:
     name: safe-eye-worker
     env: python
     plan: free
-    rootDir: Safe_Eye # Also run commands from the backend folder
+    rootDir: Safe_Eye
     buildCommand: pip install -r requirements.txt
     startCommand: celery -A Safe_Eye worker --loglevel=info
     envVars:
@@ -51,9 +45,9 @@ services:
       - key: DATABASE_URL
         fromDatabase:
           name: safe-eye-db
+          property: connectionString # <-- FIX #2 IS HERE
       - key: DEBUG
         value: False
-      # Also add your email and Redis vars to the worker manually
 
 # --------------------------------------------------
 # Backend Dependency: PostgreSQL Database
