@@ -1,63 +1,74 @@
-from ultralytics import YOLO
+# ai_model/yolo_inference.py
+
 import os
-import torch
-
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-MODEL_PATH = os.path.join(BASE_DIR, 'best.pt')
-
-model = None
-try:
-    model = YOLO(MODEL_PATH)
-except Exception as e:
-    print(f"Error loading YOLO model: {e}")
-    # Fallback: try loading with weights_only=False
-    try:
-        import torch.serialization
-        original_weights_only = torch.serialization._weights_only
-        torch.serialization._weights_only = False
-        model = YOLO(MODEL_PATH)
-        torch.serialization._weights_only = original_weights_only
-    except Exception as e2:
-        print(f"Failed to load YOLO model with fallback: {e2}")
-        model = None
+from ultralytics import YOLO
 
 class YOLOInference:
-    def __init__(self):
-        global model
-        self.model = model
-        if self.model is None:
-            raise RuntimeError("YOLO model not loaded.")
+    """
+    A singleton class to manage the YOLO model.
+    This ensures the model is loaded into memory only once and shared.
+    """
+    _instance = None  # This class variable will hold the single instance
 
-    def detect_accidents(self, img):
+    @classmethod
+    def get_instance(cls):
         """
-        Accept numpy frame directly
+        This is the correct way to get the YOLO model instance.
+        It creates a new one only if it doesn't exist.
         """
-        results = self.model(img)
+        if cls._instance is None:
+            print("🧠 [YOLO] No instance found. Creating new YOLOInference instance...")
+            cls._instance = cls()
+        return cls._instance
+
+    def __init__(self):
+        """
+        The constructor is now 'private'. It loads the model when the
+        first instance is created by get_instance().
+        """
+        # This check prevents anyone from creating a new instance directly
+        if hasattr(YOLOInference, '_instance') and YOLOInference._instance is not None:
+            raise Exception("This is a singleton class. Use YOLOInference.get_instance() to access it.")
+
+        try:
+            # Construct the full path to the model file
+            model_path = os.path.join(os.path.dirname(__file__), 'best.pt')
+            print(f"🧠 [YOLO] Loading model from: {model_path}")
+            self.model = YOLO(model_path)
+            print("✅ [YOLO] Model loaded successfully.")
+        except Exception as e:
+            print(f"❌ [YOLO] FATAL: Could not load model. Error: {e}")
+            self.model = None
+
+    def detect_accidents(self, frame):
+        """
+        Runs accident detection on a given frame and returns structured data.
+        """
+        if not self.model:
+            return [] # Return empty list if model failed to load
+
+        # verbose=False keeps the console clean during detection
+        results = self.model(frame, verbose=False)
         detections = []
         for r in results:
-            boxes = r.boxes
-            for box in boxes:
-                bbox = box.xyxy[0].tolist()  # [x1, y1, x2, y2]
-                confidence = float(box.conf[0])
-                class_id = int(box.cls[0])
-                class_name = self.model.names[class_id] if hasattr(self.model, 'names') else str(class_id)
+            for box in r.boxes:
                 detections.append({
-                    'bbox': bbox,
-                    'confidence': confidence,
-                    'class_id': class_id,
-                    'class_name': class_name
+                    'class_name': self.model.names[int(box.cls)],
+                    'confidence': float(box.conf)
                 })
         return detections
-    
-    # For backward-compatibility with your REST “manual upload” view
-def predict_image(image_path: str):
-    """
-    Load an image from disk path, run YOLO inference, return raw results list.
-    """
-    if model is None:
-        raise RuntimeError("YOLO model not loaded.")
-    return model(image_path)
 
+    def detect_and_draw(self, frame):
+        """
+        This method runs detection and draws the bounding boxes on the image.
+        It's used by your other, non-WebSocket views.
+        """
+        if not self.model:
+            return frame, []
 
-
-
+        results = self.model(frame, verbose=False)
+        # .plot() is a helper from Ultralytics to draw the boxes
+        annotated_frame = results[0].plot()
+        # We can reuse the main detection logic
+        detections = self.detect_accidents(frame)
+        return annotated_frame, detections

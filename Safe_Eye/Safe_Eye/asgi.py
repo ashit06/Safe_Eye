@@ -1,37 +1,35 @@
 # Safe_Eye/asgi.py
-"""
-ASGI config for Safe_Eye project.
-
-It exposes the ASGI callable as a module-level variable named ``application``.
-
-For more information on this file, see
-https://docs.djangoproject.com/en/5.0/howto/deployment/asgi/
-"""
 
 import os
-import django
-from channels.routing import ProtocolTypeRouter, URLRouter
 from django.core.asgi import get_asgi_application
 
-# Set the settings module environment variable.
+# Set the default Django settings module for the 'asgi' application.
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'Safe_Eye.settings')
 
-# This is the critical line that configures Django's settings.
-django.setup()
+# --- THIS IS THE FIX: Part 1 ---
+# Initialize the Django application first. This is crucial because it loads
+# the app registry and makes models available for other parts of the application.
+django_asgi_app = get_asgi_application()
 
-# Now that Django is configured, we can safely import other parts of the app.
+# Now that Django is initialized, we can safely import other components
+# that might depend on the app registry, like routing configurations.
+from channels.routing import ProtocolTypeRouter, URLRouter
 from channels.auth import AuthMiddlewareStack
-from ai_model.routing import websocket_urlpatterns
+from channels.sessions import SessionMiddlewareStack
+import ai_model.routing
+import notifications.routing
 
-
+# --- THIS IS THE FIX: Part 2 ---
+# The application router now uses the initialized 'django_asgi_app' for HTTP requests.
 application = ProtocolTypeRouter({
-    # Django's ASGI application to handle traditional HTTP requests
-    "http": get_asgi_application(),
-
-    # WebSocket chat handler
-    "websocket": AuthMiddlewareStack(
-        URLRouter(
-            websocket_urlpatterns
+    "http": django_asgi_app,
+    "websocket": SessionMiddlewareStack(
+        AuthMiddlewareStack(
+            URLRouter(
+                # Combine the WebSocket URL patterns from your different apps.
+                ai_model.routing.websocket_urlpatterns +
+                notifications.routing.websocket_urlpatterns
+            )
         )
     ),
 })

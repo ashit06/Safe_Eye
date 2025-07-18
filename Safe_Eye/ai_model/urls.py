@@ -1,13 +1,12 @@
-from django.urls import path
-# We update the imports to only include the views that are still active.
-from .views import detect_accident, video_feed
+# ai_model/urls.py
 
+from django.urls import path
+from . import views
+
+# These are the specific endpoints for your AI model functionality
 urlpatterns = [
-    # This URL is for your manual image upload.
-    path('incident/', detect_accident, name='incident'),
-    
-    # This URL is for the separate MJPEG video streaming feature.
-    path('video-feed/', video_feed, name='video_feed'),
-    
-    # The URLs for the old camera control views have been removed to prevent import errors.
+    # Endpoint for uploading an image to detect an accident
+    path('detect/', views.detect_accident, name='detect_accident'),
+    # Endpoint for the live MJPEG video stream with detections
+    path('video_feed/', views.video_feed, name='video_feed'),
 ]

@@ -1,75 +1,123 @@
+// src/components/alert-panel.tsx
+
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, RefObject } from "react";
 import api from '@/lib/api';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Bell, Mail, Phone, MessageSquare } from "lucide-react";
-import { getAuthToken } from "@/lib/auth";
+import { Bell, Mail, Loader2, Save } from "lucide-react";
 
 interface Incident {
   id: number;
   incident_type: string;
-  description: string;
   location: string;
   timestamp: string;
-  reported_by: number;
+  status: 'active' | 'investigating' | 'resolved';
 }
 
-export default function AlertPanel() {
+interface SystemSettings {
+    id: number;
+    email_alert_enabled: boolean;
+    sound_alert_enabled: boolean;
+    alert_email_address: string;
+    email_alert_template: string;
+}
+
+// The component now accepts the WebSocket reference as a prop
+interface AlertPanelProps {
+  wsRef: RefObject<WebSocket | null>;
+}
+
+export default function AlertPanel({ wsRef }: AlertPanelProps) {
   const [alerts, setAlerts] = useState<Incident[]>([]);
-  const [emailNotifications, setEmailNotifications] = useState(true);
-  const [smsNotifications, setSmsNotifications] = useState(false);
-  const [soundAlerts, setSoundAlerts] = useState(true);
-  const [isLoading, setIsLoading] = useState(false);
+  const [settings, setSettings] = useState<Partial<SystemSettings>>({});
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
-    fetchAlerts();
-  }, []);
+    // Fetch the initial list of active alerts when the component loads
+    const fetchInitialData = async () => {
+      setIsLoading(true);
+      try {
+        const [alertsRes, settingsRes] = await Promise.all([
+          api.get<Incident[]>('/incidents/?status=active'),
+          api.get<SystemSettings[]>('/settings/')
+        ]);
+        
+        setSettings(settingsRes.data[0] || {});
+        setAlerts(alertsRes.data);
+      } catch (err) {
+        console.error("Failed to fetch initial data", err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchInitialData();
 
-  const fetchAlerts = async () => {
-    const token = getAuthToken();
-    if (!token) return;
+    // Listen for new messages on the WebSocket passed from the dashboard
+    const handleWebSocketMessage = (event: MessageEvent) => {
+        const data = JSON.parse(event.data);
+        // Check for the specific message type from the backend signal
+        if (data.message_type === 'new_incident_alert' && data.incident) {
+            // Add the new incident to the top of the alerts list to update the UI
+            setAlerts(prevAlerts => [data.incident, ...prevAlerts]);
+        }
+    };
 
-    setIsLoading(true);
-    try {
-      // --- THIS IS THE NEW CODE ---
-      const response = await api.get('/incidents/');
-
-      // Filter out normal incidents (only show active ones)
-      const activeAlerts = response.data.filter(
-        (incident: Incident) => incident.incident_type.toLowerCase() !== "normal"
-      );
-      setAlerts(activeAlerts);
-    } catch (err) {
-      console.error("Failed to fetch alerts", err);
-    } finally {
-      setIsLoading(false);
+    const ws = wsRef.current;
+    if (ws) {
+        ws.addEventListener('message', handleWebSocketMessage);
     }
+
+    // Cleanup function to remove the event listener when the component unmounts
+    return () => {
+        if (ws) {
+            ws.removeEventListener('message', handleWebSocketMessage);
+        }
+    };
+  }, [wsRef]); // This effect depends on the WebSocket reference
+
+  const handleSettingChange = (key: keyof SystemSettings, value: any) => {
+    setSettings(prev => ({ ...prev, [key]: value }));
   };
 
-  const acknowledgeAlert = async (incidentId: number) => {
-    const token = getAuthToken();
-    if (!token) return;
-
+  const handleSaveChanges = async () => {
+    if (!settings.id) return;
+    setIsSaving(true);
     try {
-      // --- THIS IS THE NEW CODE (FIXED) ---
+      await api.patch(`/settings/${settings.id}/`, settings);
+      console.log("Settings saved successfully!");
+    } catch (err) {
+      console.error("Failed to save settings", err);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+  
+  const acknowledgeAlert = async (incidentId: number) => {
+    try {
       await api.patch(`/incidents/${incidentId}/`, { status: "resolved" });
-      // Remove acknowledged alert from UI
       setAlerts((prev) => prev.filter((alert) => alert.id !== incidentId));
     } catch (err) {
       console.error("Failed to acknowledge alert", err);
     }
   };
 
+  if (isLoading) {
+    return (
+        <div className="flex justify-center items-center p-8">
+            <Loader2 className="h-8 w-8 animate-spin" />
+        </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
-      {/* Active Alerts */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -79,38 +127,22 @@ export default function AlertPanel() {
           <CardDescription>Current alerts requiring attention</CardDescription>
         </CardHeader>
         <CardContent>
-          {isLoading ? (
-            <p>Loading alerts...</p>
-          ) : alerts.length === 0 ? (
+          {alerts.length === 0 ? (
             <p className="text-center text-gray-500">No active alerts at this moment.</p>
           ) : (
             <div className="space-y-4">
               {alerts.map((alert) => (
                 <div key={alert.id} className="flex items-center justify-between p-4 border rounded-lg">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1">
-                      <h4 className="font-medium capitalize">{alert.incident_type}</h4>
-                      <Badge
-                        variant={
-                          ["murder", "robbery", "accident"].includes(alert.incident_type.toLowerCase())
-                            ? "destructive"
-                            : "default"
-                        }
-                      >
-                        {alert.incident_type}
-                      </Badge>
-                    </div>
+                  <div>
+                    <h4 className="font-medium capitalize">{alert.incident_type}</h4>
                     <p className="text-sm text-gray-600">{alert.location}</p>
-                    <p className="text-xs text-gray-500">
+                     <p className="text-xs text-gray-400">
                       {new Date(alert.timestamp).toLocaleString()}
                     </p>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Badge variant="destructive">Active</Badge>
-                    <Button size="sm" variant="outline" onClick={() => acknowledgeAlert(alert.id)}>
-                      Acknowledge
-                    </Button>
-                  </div>
+                  <Button size="sm" variant="outline" onClick={() => acknowledgeAlert(alert.id)}>
+                    Acknowledge
+                  </Button>
                 </div>
               ))}
             </div>
@@ -118,7 +150,7 @@ export default function AlertPanel() {
         </CardContent>
       </Card>
 
-      {/* Notification Settings */}
+      {/* Settings Section (unchanged) */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card>
           <CardHeader>
@@ -131,78 +163,62 @@ export default function AlertPanel() {
                 <Mail className="h-4 w-4" />
                 <Label htmlFor="email-notifications">Email Notifications</Label>
               </div>
-              <Switch id="email-notifications" checked={emailNotifications} onCheckedChange={setEmailNotifications} />
+              <Switch
+                id="email-notifications"
+                checked={settings.email_alert_enabled ?? false}
+                onCheckedChange={(checked) => handleSettingChange('email_alert_enabled', checked)}
+              />
             </div>
-
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <MessageSquare className="h-4 w-4" />
-                <Label htmlFor="sms-notifications">SMS Notifications</Label>
-              </div>
-              <Switch id="sms-notifications" checked={smsNotifications} onCheckedChange={setSmsNotifications} />
-            </div>
-
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Bell className="h-4 w-4" />
-                <Label htmlFor="sound-alerts">Sound Alerts</Label>
+                <Label htmlFor="sound-alerts">Sound Alerts (Dashboard)</Label>
               </div>
-              <Switch id="sound-alerts" checked={soundAlerts} onCheckedChange={setSoundAlerts} />
+              <Switch
+                id="sound-alerts"
+                checked={settings.sound_alert_enabled ?? false}
+                onCheckedChange={(checked) => handleSettingChange('sound_alert_enabled', checked)}
+              />
             </div>
-
             <div className="space-y-2">
               <Label htmlFor="alert-email">Alert Email Address</Label>
-              <Input id="alert-email" type="email" placeholder="admin@roadsafety.com" defaultValue="admin@roadsafety.com" />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="alert-phone">Alert Phone Number</Label>
-              <Input id="alert-phone" type="tel" placeholder="+1-555-0123" defaultValue="+1-555-0123" />
+              <Input
+                id="alert-email"
+                type="email"
+                value={settings.alert_email_address || ''}
+                onChange={(e) => handleSettingChange('alert_email_address', e.target.value)}
+              />
             </div>
           </CardContent>
         </Card>
 
-        {/* Emergency Contacts */}
         <Card>
           <CardHeader>
-            <CardTitle>Emergency Contacts</CardTitle>
-            <CardDescription>Configured notification recipients</CardDescription>
+            <CardTitle>Email Message Template</CardTitle>
+            <CardDescription>Customize the alert message format</CardDescription>
           </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <div className="p-3 border rounded-lg">
-                <h4 className="font-medium">Police Department</h4>
-                <div className="text-sm text-gray-600">
-                  <Mail className="h-3 w-3 inline" /> police@city.gov <br />
-                  <Phone className="h-3 w-3 inline" /> +1-911
-                </div>
-              </div>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="email-template">
+                Placeholders: {"{incident_type}"}, {"{location}"}, {"{timestamp}"}, {"{confidence}"}
+              </Label>
+              <Textarea
+                id="email-template"
+                value={settings.email_alert_template || ''}
+                onChange={(e) => handleSettingChange('email_alert_template', e.target.value)}
+                rows={8}
+              />
             </div>
           </CardContent>
         </Card>
       </div>
-
-      {/* Alert Template */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Alert Message Template</CardTitle>
-          <CardDescription>Customize the alert message format</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="email-template">Email Template</Label>
-              <Textarea
-                id="email-template"
-                placeholder="Alert: {EVENT_TYPE} detected at {LOCATION}..."
-                defaultValue="URGENT ALERT: {EVENT_TYPE} detected at {LOCATION} on {DATE} at {TIME}. Severity Level: {SEVERITY}. Immediate response required."
-                rows={4}
-              />
-            </div>
-            <Button>Save Template</Button>
-          </div>
-        </CardContent>
-      </Card>
+      
+      <div className="flex justify-end">
+        <Button onClick={handleSaveChanges} disabled={isSaving}>
+          {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+          Save All Settings
+        </Button>
+      </div>
     </div>
   );
 }

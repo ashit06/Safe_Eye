@@ -14,7 +14,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-a-very-insecure-default-key-for-dev')
 DEBUG = os.environ.get('DEBUG', 'False').lower() == 'true'
 
-ALLOWED_HOSTS = ['safe-eye-backend.onrender.com', 'localhost', '127.0.0.1']
+ALLOWED_HOSTS = ['safe-eye-backend.onrender.com', 'localhost', '127.0.0.1','testserver']
 
 # --- CORS & CSRF CONFIGURATION (PRODUCTION) ---
 CORS_ALLOWED_ORIGINS = [
@@ -147,3 +147,50 @@ MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+
+# Celery Configuration
+# Use the same Redis instance as your Channels layer
+CELERY_BROKER_URL = os.environ.get("REDIS_URL", "redis://localhost:6379")
+CELERY_RESULT_BACKEND = os.environ.get("REDIS_URL", "redis://localhost:6379")
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+CELERY_TIMEZONE = 'UTC'
+
+
+# --- EMAIL CONFIGURATION (SMTP for Production) ---
+# This configuration uses SMTP to send real emails.
+# It is crucial to use environment variables to keep your credentials secure.
+# Do NOT hardcode your email or password in this file.
+#
+# For Gmail, you MUST generate an "App Password".
+# 1. Go to your Google Account settings.
+# 2. Go to "Security".
+# 3. Enable 2-Step Verification.
+# 4. Go to "App passwords", create a new password for this app, and use it below.
+
+# Set to 'True' in your environment to enable SMTP.
+USE_SMTP = os.environ.get('USE_SMTP', 'False') == 'True'
+
+if USE_SMTP:
+    print("✅ SMTP is enabled. Attempting to use real email configuration.")
+    EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+    EMAIL_HOST = os.environ.get('EMAIL_HOST')  # e.g., 'smtp.gmail.com'
+    EMAIL_PORT = int(os.environ.get('EMAIL_PORT', 587))
+    EMAIL_USE_TLS = os.environ.get('EMAIL_USE_TLS', 'True') == 'True'
+    EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER')  # Your full email address
+    EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD')  # Your App Password
+else:
+    # --- Fallback for Development ---
+    # Emails will be printed to the console where you run the server.
+    print("-------------------------------------------------")
+    print("WARNING: SMTP not configured. Emails will be printed to the console.")
+    print("To send real emails, set USE_SMTP=True and other EMAIL_* variables in your environment.")
+    print("-------------------------------------------------")
+    EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+
+
+# This is the "From" address that will appear on the emails.
+DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', 'Safe Eye Alert <noreply@safe-eye.com>')
+
