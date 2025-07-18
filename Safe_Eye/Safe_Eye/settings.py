@@ -93,16 +93,12 @@ ASGI_APPLICATION = 'Safe_Eye.asgi.application'
 REDIS_URL = os.environ.get('REDIS_URL')
 
 if REDIS_URL:
-    # This logic handles the secure 'rediss://' URL for production on Render.
-    # The '?ssl_cert_reqs=CERT_NONE' part is the direct fix for your error.
+    # This fix is still required for Railway's Redis
     CELERY_BROKER_URL = f"{REDIS_URL}?ssl_cert_reqs={ssl.CERT_NONE}"
-
     CHANNEL_LAYERS = {
         "default": {
             "BACKEND": "channels_redis.core.RedisChannelLayer",
-            "CONFIG": {
-                "hosts": [f"{REDIS_URL}?ssl_cert_reqs={ssl.CERT_NONE}"],
-            },
+            "CONFIG": { "hosts": [f"{REDIS_URL}?ssl_cert_reqs={ssl.CERT_NONE}"], },
         },
     }
 else:
